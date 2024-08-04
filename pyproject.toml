@@ -1,0 +1,23 @@
+[project]
+name = "Resumption"
+version = "1.0.0"
+description = "Allows interrupting and resuming python scripts"
+authors = [
+    {name = "Aleksandr Grin", email = "bytebrushsoftware@gmail.com"},
+]
+dependencies = []
+requires-python = ">=3.12"
+readme = "README.md"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pdm]
+distribution = true
+
+[tool.pdm.dev-dependencies]
+dev = [
+    "pytest>=8.3.2",
+]
