@@ -1,4 +1,5 @@
 import pytest
+import dis
 from types import CodeType
 from textwrap import dedent
 from Resumption import (
@@ -7,6 +8,8 @@ from Resumption import (
     JumpPair,
     Origin,
     Destination,
+    DataType,
+    DataLoad,
 )
 
 
@@ -60,6 +63,26 @@ def jumps(source_name: str) -> list[JumpPair]:
                     byte_offsets = [16, 26, 46],
                     is_complete = True,
                 )
+            ],
+            data_loads = [
+                 DataLoad(
+                     name = 5,
+                     scope = 'simple_backward',
+                     data_type = DataType.LOCAL,
+                     instructions = [
+                        dis.Instruction(opname='LOAD_CONST', opcode=100, arg=1, argval=5, argrepr='5', offset=2, starts_line=3, is_jump_target=False, positions=dis.Positions(lineno=3, end_lineno=3, col_offset=8, end_col_offset=9)),
+                        dis.Instruction(opname='STORE_FAST', opcode=125, arg=0, argval='a', argrepr='a', offset=4, starts_line=None, is_jump_target=False, positions=dis.Positions(lineno=3, end_lineno=3, col_offset=4, end_col_offset=5)),
+                    ],
+                 ),
+                 DataLoad(
+                     name = 7,
+                     scope = 'simple_backward',
+                     data_type = DataType.LOCAL,
+                     instructions = [
+                        dis.Instruction(opname='LOAD_CONST', opcode=100, arg=3, argval=7, argrepr='7', offset=48, starts_line=6, is_jump_target=False, positions=dis.Positions(lineno=6, end_lineno=6, col_offset=12, end_col_offset=13)),
+                        dis.Instruction(opname='STORE_FAST', opcode=125, arg=0, argval='a', argrepr='a', offset=50, starts_line=None, is_jump_target=False, positions=dis.Positions(lineno=6, end_lineno=6, col_offset=8, end_col_offset=9)),
+                    ],
+                 ),
             ]
         )
     ]
@@ -78,4 +101,4 @@ def test_jump_backward(
         code = source,
         jump_pairs = jump_pairs,
     )
-    exec(patched_code, {}, {})
+    exec(patched_code, {})

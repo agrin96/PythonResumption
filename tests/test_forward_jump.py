@@ -1,4 +1,5 @@
 import pytest
+import dis
 from types import CodeType
 from textwrap import dedent
 from Resumption import (
@@ -7,6 +8,8 @@ from Resumption import (
     JumpPair,
     Origin,
     Destination,
+    DataLoad,
+    DataType,
 )
 
 
@@ -58,13 +61,33 @@ def jumps(source_name: str) -> list[JumpPair]:
                     byte_offsets = [42, 52, 72],
                     is_complete = True
                 )
+            ],
+            data_loads = [
+                DataLoad(
+                    name = 5,
+                    scope = 'simple_forward',
+                    data_type = DataType.LOCAL,
+                    instructions = [
+                        dis.Instruction(opname='LOAD_CONST', opcode=100, arg=1, argval=5, argrepr='5', offset=2, starts_line=3, is_jump_target=False, positions=dis.Positions(lineno=3, end_lineno=3, col_offset=8, end_col_offset=9)),
+                        dis.Instruction(opname='STORE_FAST', opcode=125, arg=0, argval='a', argrepr='a', offset=4, starts_line=None, is_jump_target=False, positions=dis.Positions(lineno=3, end_lineno=3, col_offset=4, end_col_offset=5)),
+                    ],
+                ),
+                DataLoad(
+                    name = 7,
+                    scope = 'simple_forward',
+                    data_type = DataType.LOCAL,
+                    instructions = [
+                        dis.Instruction(opname='LOAD_CONST', opcode=100, arg=2, argval=7, argrepr='7', offset=38, starts_line=5, is_jump_target=False, positions=dis.Positions(lineno=5, end_lineno=5, col_offset=8, end_col_offset=9)),
+                        dis.Instruction(opname='STORE_FAST', opcode=125, arg=0, argval='a', argrepr='a', offset=40, starts_line=None, is_jump_target=False, positions=dis.Positions(lineno=5, end_lineno=5, col_offset=4, end_col_offset=5)),
+                    ],
+                ),
             ]
         )
     ]
 
 
 
-@pytest.mark.parametrize("source", [5], indirect = True)
+@pytest.mark.parametrize("source", [7], indirect = True)
 def test_simple_jump_forward(
         source: CodeType,
         jumps: list[JumpPair],
@@ -76,4 +99,5 @@ def test_simple_jump_forward(
         code = source,
         jump_pairs = jump_pairs,
     )
-    exec(patched_code, {}, {})
+    dis.dis(patched_code)
+    exec(patched_code, {})

@@ -1,4 +1,5 @@
 import pytest
+import dis
 from types import CodeType
 from textwrap import dedent
 from Resumption import (
@@ -7,6 +8,8 @@ from Resumption import (
     JumpPair,
     Origin,
     Destination,
+    DataLoad,
+    DataType,
 )
 
 
@@ -70,6 +73,35 @@ def jumps(source_name: str) -> list[JumpPair]:
                     byte_offsets = [88, 98, 118],
                     is_complete = True
                 )
+            ],
+            data_loads = [
+                DataLoad(
+                    name = 3,
+                    scope = 'simple_forward',
+                    data_type = DataType.LOCAL,
+                    instructions = [
+                        dis.Instruction(opname='LOAD_CONST', opcode=100, arg=1, argval=3, argrepr='3', offset=2, starts_line=3, is_jump_target=False, positions=dis.Positions(lineno=3, end_lineno=3, col_offset=8, end_col_offset=9)),
+                        dis.Instruction(opname='STORE_FAST', opcode=125, arg=1, argval='a', argrepr='a', offset=4, starts_line=None, is_jump_target=False, positions=dis.Positions(lineno=3, end_lineno=3, col_offset=4, end_col_offset=5)),
+                    ],
+                ),
+                DataLoad(
+                    name = 5,
+                    scope = 'simple_forward',
+                    data_type = DataType.LOCAL,
+                    instructions = [
+                        dis.Instruction(opname='LOAD_CONST', opcode=100, arg=3, argval=5, argrepr='5', offset=48, starts_line=6, is_jump_target=True, positions=dis.Positions(lineno=6, end_lineno=6, col_offset=8, end_col_offset=9)),
+                        dis.Instruction(opname='STORE_FAST', opcode=125, arg=1, argval='a', argrepr='a', offset=50, starts_line=None, is_jump_target=False, positions=dis.Positions(lineno=6, end_lineno=6, col_offset=4, end_col_offset=5)),
+                    ],
+                ),
+                DataLoad(
+                    name = 7,
+                    scope = 'simple_forward',
+                    data_type = DataType.LOCAL,
+                    instructions = [
+                        dis.Instruction(opname='LOAD_CONST', opcode=100, arg=4, argval=7, argrepr='7', offset=84, starts_line=8, is_jump_target=False, positions=dis.Positions(lineno=8, end_lineno=8, col_offset=8, end_col_offset=9)),
+                        dis.Instruction(opname='STORE_FAST', opcode=125, arg=1, argval='a', argrepr='a', offset=86, starts_line=None, is_jump_target=False, positions=dis.Positions(lineno=8, end_lineno=8, col_offset=4, end_col_offset=5)),
+                    ],
+                ),
             ]
         )
     ]
@@ -78,7 +110,7 @@ def jumps(source_name: str) -> list[JumpPair]:
 
 @pytest.mark.parametrize(
     "source",
-    [(0, 3), (1, 5)],
+    [(0, 7), (1, 7)],
     indirect = True,
 )
 def test_multiple_origin_jumps_forward(

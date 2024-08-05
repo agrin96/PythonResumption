@@ -5,7 +5,10 @@ description = "Allows interrupting and resuming python scripts"
 authors = [
     {name = "Aleksandr Grin", email = "bytebrushsoftware@gmail.com"},
 ]
-dependencies = []
+dependencies = [
+    "libcst>=1.4.0",
+    "termcolor>=2.4.0",
+]
 requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "MIT"}

@@ -4,7 +4,10 @@ from Resumption.JumpPairs.Definitions import (
 	Origin,
 	Offsets,
 	JumpPair,
+	DataLoad,
+	DataType,
 	JumpName,
+	DataStore,
 	OriginStore,
 	Destination,
 	ScanningState,
@@ -53,16 +56,20 @@ def find_jump_bytecodes(
 		code: CodeType,
 		current_origins: OriginStore | None = None,
 		current_destinations: DestinationStore | None = None,
-	) -> tuple[OriginStore, DestinationStore]:
+		current_store: DataStore | None = None
+	) -> tuple[OriginStore, DestinationStore, DataStore]:
 	"""### Match pairs"""
 	origin_store = current_origins if current_origins else {}
 	destination_store = current_destinations if current_destinations else {}
+	data_store = current_store if current_store else []
 
 	working_offsets: Offsets = []
 	current_jump_name: JumpName | None = None
 	current_line = 0
 
 	state = ScanningState.SCANNING
+	instruction_stack = []
+
 	for instruction in dis.get_instructions(code, show_caches = True):
 		if instruction.starts_line:
 			current_line = instruction.starts_line
@@ -70,19 +77,30 @@ def find_jump_bytecodes(
 		match instruction.opname:
 			case "FOR_ITER":
 				pass
+
 			case "LOAD_GLOBAL":
-				if state != ScanningState.SCANNING:
-					raise RuntimeError("I don't understand how to handle this situation")
+				# If we were in one of the LOAD states and we went to an unexpected
+				# instruction then we clear the load code.
+				if state in (ScanningState.LOAD_CODE, ScanningState.LOAD_LOCAL):
+					data_store.pop()
+					state = ScanningState.SCANNING
 				
-				if isinstance((value := instruction.argval), str):
-					if value.lower() == "goto":
-						state = ScanningState.ORIGIN
-						working_offsets.append(instruction.offset)
-					if value.lower() == "label":
-						state = ScanningState.DESTINATION
-						working_offsets.append(instruction.offset)
+				if state == ScanningState.SCANNING:
+					if isinstance((value := instruction.argval), str):
+						if value.lower() == "goto":
+							state = ScanningState.ORIGIN
+							working_offsets.append(instruction.offset)
+						if value.lower() == "label":
+							state = ScanningState.DESTINATION
+							working_offsets.append(instruction.offset)
 
 			case "LOAD_NAME":
+				# If we were in one of the LOAD states and we went to an unexpected
+				# instruction then we clear the load code.
+				if state in (ScanningState.LOAD_CODE, ScanningState.LOAD_LOCAL):
+					data_store.pop()
+					state = ScanningState.SCANNING
+
 				# When adding a goto on the module level, it is loaded using
 				# LOAD_NAME instead of LOAD_GLOBAL
 				if state != ScanningState.SCANNING:
@@ -97,6 +115,12 @@ def find_jump_bytecodes(
 						working_offsets.append(instruction.offset)
 
 			case "LOAD_ATTR":
+				# If we were in one of the LOAD states and we went to an unexpected
+				# instruction then we clear the load code.
+				if state in (ScanningState.LOAD_CODE, ScanningState.LOAD_LOCAL):
+					data_store.pop()
+					state = ScanningState.SCANNING
+
 				if state == ScanningState.ORIGIN:
 					if isinstance((value := instruction.argval), str):
 						candidate = Origin(
@@ -132,6 +156,12 @@ def find_jump_bytecodes(
 						current_jump_name = value
 
 			case "POP_TOP":
+				# If we were in one of the LOAD states and we went to an unexpected
+				# instruction then we clear the load code.
+				if state in (ScanningState.LOAD_CODE, ScanningState.LOAD_LOCAL):
+					data_store.pop()
+					state = ScanningState.SCANNING
+
 				# Pop comes at the end of every block that defines one of our
 				# goto or label statements
 				if state == ScanningState.ORIGIN:
@@ -151,7 +181,59 @@ def find_jump_bytecodes(
 					destination_store[current_jump_name][-1].is_complete = True
 
 				state = ScanningState.SCANNING
-	return (origin_store, destination_store)
+			
+			case "LOAD_CONST":
+				if state == ScanningState.SCANNING:
+					value = instruction.argval
+					if isinstance(value, CodeType):
+						instruction_stack.append("LOAD_CONST")
+						data_store.append(
+							DataLoad(
+								name = value.co_name,
+								scope = code.co_name,
+								data_type = DataType.CODE,
+								instructions = [instruction]
+							)
+						)
+						state = ScanningState.LOAD_CODE
+					else:
+						data_store.append(
+							DataLoad(
+								name = value,
+								scope = code.co_name,
+								data_type = DataType.LOCAL,
+								instructions = [instruction]
+							)
+						)
+						state = ScanningState.LOAD_LOCAL
+			case "STORE_GLOBAL":
+				if state == ScanningState.LOAD_LOCAL:
+					data_store[-1].data_type = DataType.GLOBAL
+					data_store[-1].instructions.append(instruction)
+					state = ScanningState.SCANNING
+
+			case "MAKE_FUNCTION":
+				if state == ScanningState.LOAD_CODE:
+					data_store[-1].instructions.append(instruction)
+
+			case "STORE_NAME":
+				if state == ScanningState.LOAD_CODE:
+					data_store[-1].instructions.append(instruction)
+					state = ScanningState.SCANNING
+
+			case "STORE_FAST":
+				if state == ScanningState.LOAD_LOCAL:
+					data_store[-1].instructions.append(instruction)
+					state = ScanningState.SCANNING
+
+			case _:
+				# If we were in one of the LOAD states and we went to an unexpected
+				# instruction then we clear the load code.
+				if state in (ScanningState.LOAD_CODE, ScanningState.LOAD_LOCAL):
+					data_store.pop()
+					state = ScanningState.SCANNING
+
+	return (origin_store, destination_store, data_store)
 
 
 
@@ -166,11 +248,13 @@ def find_jump_pairs(code: CodeType) -> list[JumpPair]:
 	
 	origin_store: OriginStore = {}
 	destination_store: DestinationStore = {}
+	data_store: DataStore = []
 	for source in bytecode_sources:
-		origin_store, destination_store = find_jump_bytecodes(
+		origin_store, destination_store, data_store = find_jump_bytecodes(
 			source,
 			current_origins = origin_store,
-			current_destinations = destination_store
+			current_destinations = destination_store,
+			current_store = data_store,
 		)
 	
 	# Need to handle error cases figuring out where how to group valid and invalid
@@ -190,12 +274,18 @@ def find_jump_pairs(code: CodeType) -> list[JumpPair]:
 				raise DuplicateDestinationsError(
 					F"Scope '{scope}' has duplicate destination names: '{label}'"
 				)
+		
+		associated_data = []
+		for data in data_store:
+			if data.scope == origin_list[0].scope_name:
+				associated_data.append(data)
 			
 		jumps.append(
 			JumpPair(
 				name = label,
 				origin = origin_list,
 				destination = destination_list,
+				data_loads = associated_data,
 			)
 		)
 
